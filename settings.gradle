@@ -1,0 +1,1 @@
+include ':MidiTools', ':MidiUmpKeyboard', ':MidiUmpScope'
