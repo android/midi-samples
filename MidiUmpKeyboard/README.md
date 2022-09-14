@@ -11,3 +11,9 @@ MIDI 2.0 Note On, Note Off, Program Change, and Per Note Pitch Bend messages.
 Select the target device from the spinner menu.
 
 This app will NOT work on MIDI devices that do not support MIDI 2.0 over USB.
+
+Images
+-----------
+![keyboard_image](keyboard_image.png)
+
+The connected USB MIDI device has yet to be released so its name is censored out.
