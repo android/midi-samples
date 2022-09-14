@@ -15,4 +15,4 @@ Images
 -----------
 ![scope_image](scope_image.png)
 
-The USB MIDI device has been censored out as it has not released yet.
+The connected USB MIDI device has yet to be released so its name is censored out.
