@@ -43,6 +43,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:entries="@array/receivers" />
+
+        <CheckBox
+            android:id="@+id/pitch_bend_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pitch_bend_toggle_text"
+            android:onClick="onToggleSetPitchBend"
+            android:checked="true"
+            />
     </LinearLayout>
 
     <LinearLayout
@@ -63,17 +72,29 @@
             android:layout_height="wrap_content"
             android:entries="@array/channels" />
 
+        <TextView
+            android:id="@+id/text_groups"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/groups_text" />
+
+        <Spinner
+            android:id="@+id/spinner_groups"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:entries="@array/groups" />
+
         <LinearLayout
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:weightSum="0.7">
+            android:weightSum="0.6">
 
             <TextView
                 android:id="@+id/text_program_prompt"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="0.2"
+                android:layout_weight="0.1"
                 android:text="@string/program_text" />
 
             <Button

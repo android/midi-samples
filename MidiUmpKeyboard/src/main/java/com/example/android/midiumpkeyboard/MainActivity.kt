@@ -53,7 +53,7 @@ class MainActivity : Activity() {
 
     inner class ChannelSpinnerActivity : OnItemSelectedListener {
         override fun onItemSelected(
-            parent: AdapterView<*>?, view: View,
+            parent: AdapterView<*>?, view: View?,
             pos: Int, id: Long
         ) {
             mChannel = pos and 0x0F
@@ -65,7 +65,7 @@ class MainActivity : Activity() {
 
     inner class GroupSpinnerActivity : OnItemSelectedListener {
         override fun onItemSelected(
-            parent: AdapterView<*>?, view: View,
+            parent: AdapterView<*>?, view: View?,
             pos: Int, id: Long
         ) {
             mGroup = pos and 0x0F
