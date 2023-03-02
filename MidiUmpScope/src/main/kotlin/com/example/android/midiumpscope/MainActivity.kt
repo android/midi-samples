@@ -22,6 +22,7 @@ import android.media.midi.MidiReceiver
 import android.os.Bundle
 import android.media.AudioDeviceInfo
 import android.media.midi.MidiInputPort
+import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -43,7 +44,9 @@ import java.util.*
 class MainActivity : Activity(), ScopeLogger {
     private var mLog: TextView? = null
     private var mScroller: ScrollView? = null
-    private val logLines = LinkedList<String>()
+    private val mLogLines = LinkedList<String>()
+    private var mWriteLineCounter = 0
+    private var mReadLineCounter = 0
     private var mLogSenderSelector: MidiInputOutputPortSelector? = null
     private var mMidiManager: MidiManager? = null
     private var mAudioManager: AudioManager? = null
@@ -136,6 +139,10 @@ class MainActivity : Activity(), ScopeLogger {
             }
         }
         (mLogSenderSelector as MidiInputOutputPortSelector).sender.connect(mDirectReceiver)
+
+        // Instead of updating the scope whenever a message comes in, batch this every 250ms as
+        // the UI thread may be too slow otherwise.
+        setupScopeUIUpdater();
     }
 
     private fun queryOptimalAudioSettings() {
@@ -173,7 +180,9 @@ class MainActivity : Activity(), ScopeLogger {
     }
 
     fun onClearLog() {
-        logLines.clear()
+        synchronized (mLogLines) {
+            mLogLines.clear()
+        }
         logFromUiThread("")
     }
 
@@ -206,9 +215,13 @@ class MainActivity : Activity(), ScopeLogger {
      * @param text
      */
     override fun log(text: String?) {
-        runOnUiThread {
-            if (text != null) {
-                logFromUiThread(text)
+        if (text != null) {
+            synchronized (mLogLines) {
+                mLogLines.add(text)
+                while (mLogLines.size > MAX_LINES) {
+                    mLogLines.removeFirst()
+                }
+                mWriteLineCounter++
             }
         }
     }
@@ -216,16 +229,7 @@ class MainActivity : Activity(), ScopeLogger {
     // Log a message to our TextView.
     // Must run on UI thread.
     private fun logFromUiThread(s: String) {
-        logLines.add(s)
-        if (logLines.size > MAX_LINES) {
-            logLines.removeFirst()
-        }
-        // Render line buffer to one String.
-        val sb = StringBuilder()
-        for (line in logLines) {
-            sb.append(line).append('\n')
-        }
-        mLog!!.text = sb.toString()
+        mLog!!.text = s
         mScroller!!.fullScroll(View.FOCUS_DOWN)
     }
 
@@ -254,9 +258,39 @@ class MainActivity : Activity(), ScopeLogger {
         }
     }
 
+    private fun setupScopeUIUpdater() {
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        mainHandler.post(object : Runnable {
+            override fun run() {
+                // Render line buffer to one String.
+                val sb = StringBuilder()
+                var shouldUpdateUIThread = false
+                synchronized (mLogLines) {
+                    if (mReadLineCounter != mWriteLineCounter) {
+                        shouldUpdateUIThread = true
+                        mReadLineCounter = mWriteLineCounter
+                    }
+                    if (shouldUpdateUIThread) {
+                        for (line in mLogLines) {
+                            sb.append(line).append('\n')
+                        }
+                    }
+                }
+                if (shouldUpdateUIThread) {
+                    runOnUiThread {
+                        logFromUiThread(sb.toString())
+                    }
+                }
+                mainHandler.postDelayed(this, TIME_BETWEEN_UI_UPDATES_MS)
+            }
+        })
+    }
+
     companion object {
         private const val TAG = "MidiUmpScope"
         private const val MAX_LINES = 100
+        private const val TIME_BETWEEN_UI_UPDATES_MS = 250L
         private val mSynthEngine = SynthEngine()
 
         // Please request a system exclusive ID with the MIDI Association.
@@ -268,5 +302,6 @@ class MainActivity : Activity(), ScopeLogger {
         // PLEASE DO NOT SHIP A PRODUCTION APP WITH THESE NUMBERS. SOME USB DEVICES MAY BREAK
         // UNLESS YOU REQUEST YOUR OWN SYSTEM EXCLUSIVE ID.
         val DEVICE_MANUFACTURER = byteArrayOf(0x7D, 0x00, 0x00)
+
     }
 }
