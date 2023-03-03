@@ -302,6 +302,5 @@ class MainActivity : Activity(), ScopeLogger {
         // PLEASE DO NOT SHIP A PRODUCTION APP WITH THESE NUMBERS. SOME USB DEVICES MAY BREAK
         // UNLESS YOU REQUEST YOUR OWN SYSTEM EXCLUSIVE ID.
         val DEVICE_MANUFACTURER = byteArrayOf(0x7D, 0x00, 0x00)
-
     }
 }
