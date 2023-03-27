@@ -54,6 +54,7 @@ class MainActivity : Activity(), ScopeLogger {
     private var mDirectReceiver: MyDirectReceiver? = null
     private var mMidiCiInitiator: MidiCiInitiator? = null
     private var mShowRaw = false
+    private var mTryMidiCI = true
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main)
@@ -117,23 +118,29 @@ class MainActivity : Activity(), ScopeLogger {
                             return
                         }
                     }
-                    Thread.sleep(100)
-                    runBlocking {
-                        launch {
-                            val midiCISetupSuccess = mMidiCiInitiator?.setupMidiCI(
-                                mDirectReceiver!!,
-                                (mLogSenderSelector as MidiInputOutputPortSelector).receiver as MidiInputPort,
-                                0,
-                                DEVICE_MANUFACTURER
-                            )
-                            Log.d(TAG, "midiCISetupSuccess: $midiCISetupSuccess")
+                    if (mTryMidiCI) {
+                        Thread.sleep(100)
+                        runBlocking {
+                            launch {
+                                val midiCISetupSuccess = mMidiCiInitiator?.setupMidiCI(
+                                    mDirectReceiver!!,
+                                    (mLogSenderSelector as MidiInputOutputPortSelector).receiver
+                                            as MidiInputPort,
+                                    0,
+                                    DEVICE_MANUFACTURER
+                                )
+                                Log.d(TAG, "midiCISetupSuccess: $midiCISetupSuccess")
 
-                            if (midiCISetupSuccess == true) {
-                                mDirectReceiver!!.isDoneWithSetup = true
-                            } else {
-                                showErrorToast("MIDI-CI failed")
+                                if (midiCISetupSuccess == true) {
+                                    mDirectReceiver!!.isDoneWithSetup = true
+                                } else {
+                                    showErrorToast("MIDI-CI failed")
+                                }
                             }
                         }
+                    } else {
+                        mDirectReceiver!!.isDoneWithSetup = true
+                        Log.d(TAG, "midi CI Setup skipped")
                     }
                 }
             }
@@ -177,6 +184,10 @@ class MainActivity : Activity(), ScopeLogger {
 
     fun onToggleShowRaw(view: View) {
         mShowRaw = (view as CheckBox).isChecked
+    }
+
+    fun onToggleTryMidiCI(view: View) {
+        mTryMidiCI = (view as CheckBox).isChecked
     }
 
     fun onClearLog() {

@@ -48,6 +48,15 @@
             android:text="@string/lock_screen_text"
             android:onClick="onToggleScreenLock"
             />
+
+        <CheckBox
+            android:id="@+id/try_midi_ci"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/try_midi_ci_text"
+            android:checked="true"
+            android:onClick="onToggleTryMidiCI"
+            />
     </LinearLayout>
 
     <Button android:id="@+id/button_clear"
