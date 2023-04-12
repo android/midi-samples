@@ -32,15 +32,5 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <service android:name="com.example.android.midiumpscope.MidiScope"
-            android:permission="android.permission.BIND_MIDI_DEVICE_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.midi.MidiDeviceService" />
-            </intent-filter>
-            <meta-data android:name="android.media.midi.MidiDeviceService"
-                android:resource="@xml/scope_device_info" />
-        </service>
     </application>
 </manifest>

@@ -79,9 +79,6 @@ class MainActivity : Activity(), ScopeLogger {
         mDirectReceiver = MyDirectReceiver()
         queryOptimalAudioSettings()
 
-        // Tell the virtual device to log its messages here..
-        MidiScope.scopeLogger = this
-
         mMidiCiInitiator = MidiCiInitiator()
 
         // Setup a menu to select an input source.
@@ -162,9 +159,6 @@ class MainActivity : Activity(), ScopeLogger {
 
     public override fun onDestroy() {
         mLogSenderSelector!!.onClose()
-        // The scope will live on as a service so we need to tell it to stop
-        // writing log messages to this Activity.
-        MidiScope.scopeLogger = null
         mSynthEngine.stop()
         super.onDestroy()
     }
