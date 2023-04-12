@@ -24,6 +24,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.view.WindowManager
 import android.widget.*
 import android.widget.AdapterView.OnItemSelectedListener
 import com.example.android.miditools.*
@@ -50,6 +51,7 @@ class MainActivity : Activity() {
     private var mMidiReceiver: WaitingMidiReceiver? = null
     private var mDoneWithSetup = false
     private var mPitchBendEnabled = true
+    private var mTryMidiCI = true
 
     inner class ChannelSpinnerActivity : OnItemSelectedListener {
         override fun onItemSelected(
@@ -136,24 +138,30 @@ class MainActivity : Activity() {
                         }
                     }
                     mDoneWithSetup = false
-                    Thread.sleep(100)
-                    runBlocking {
-                        launch {
-                            val midiCISetupSuccess = mMidiCiInitiator?.setupMidiCI(
-                                mMidiReceiver!!,
-                                (mKeyboardReceiverSelector as MidiInputOutputPortSelector).receiver
-                                        as MidiInputPort,
-                                mGroup,
-                                DEVICE_MANUFACTURER
-                            )
-                            Log.d(TAG, "Was midi successful: $midiCISetupSuccess")
+                    if (mTryMidiCI) {
+                        Thread.sleep(100)
+                        runBlocking {
+                            launch {
+                                val midiCISetupSuccess = mMidiCiInitiator?.setupMidiCI(
+                                    mMidiReceiver!!,
+                                    (mKeyboardReceiverSelector as MidiInputOutputPortSelector)
+                                        .receiver
+                                            as MidiInputPort,
+                                    mGroup,
+                                    DEVICE_MANUFACTURER
+                                )
+                                Log.d(TAG, "Was midi successful: $midiCISetupSuccess")
 
-                            if (midiCISetupSuccess == true) {
-                                mDoneWithSetup = true
-                            } else {
-                                showErrorToast("MIDI-CI failed")
+                                if (midiCISetupSuccess == true) {
+                                    mDoneWithSetup = true
+                                } else {
+                                    showErrorToast("MIDI-CI failed")
+                                }
                             }
                         }
+                    } else {
+                        mDoneWithSetup = true
+                        Log.d(TAG, "midi CI Setup skipped")
                     }
                 }
             }
@@ -316,6 +324,23 @@ class MainActivity : Activity() {
 
     fun onToggleSetPitchBend(view: View) {
         mPitchBendEnabled = (view as CheckBox).isChecked
+    }
+
+    fun onToggleScreenLock(view: View) {
+        val checked = (view as CheckBox).isChecked
+        if (checked) {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        } else {
+            window.clearFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
+
+    fun onToggleTryMidiCI(view: View) {
+        mTryMidiCI = (view as CheckBox).isChecked
     }
 
     private fun logByteArray(prefix: String, value: ByteArray, offset: Int, count: Int) {

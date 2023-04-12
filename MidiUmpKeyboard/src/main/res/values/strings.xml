@@ -66,4 +66,7 @@
     <string name="program_text">Program:</string>
     <string name="pitch_bend_toggle_text">Pitch Bend</string>
 
+    <string name="lock_screen_text">Keep Screen On</string>
+    <string name="try_midi_ci_text">Try MIDI CI</string>
+
 </resources>
