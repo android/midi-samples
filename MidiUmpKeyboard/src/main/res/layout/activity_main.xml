@@ -78,8 +78,6 @@
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="10dp"
         android:orientation="horizontal" >
 
         <CheckBox
@@ -98,6 +96,12 @@
             android:text="@string/lock_screen_text"
             android:onClick="onToggleScreenLock"
             />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal" >
 
         <CheckBox
             android:id="@+id/try_midi_ci"
@@ -106,6 +110,15 @@
             android:text="@string/try_midi_ci_text"
             android:checked="true"
             android:onClick="onToggleTryMidiCI"
+            />
+
+        <CheckBox
+            android:id="@+id/midi_ci_version_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/midi_ci_version_2"
+            android:checked="true"
+            android:onClick="onToggleUseMidiCiVersion2"
             />
     </LinearLayout>
 

@@ -55,6 +55,7 @@ class MainActivity : Activity(), ScopeLogger {
     private var mMidiCiInitiator: MidiCiInitiator? = null
     private var mShowRaw = false
     private var mTryMidiCI = true
+    private var mUseMidiCiVersion2 = true
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main)
@@ -124,7 +125,8 @@ class MainActivity : Activity(), ScopeLogger {
                                     (mLogSenderSelector as MidiInputOutputPortSelector).receiver
                                             as MidiInputPort,
                                     0,
-                                    DEVICE_MANUFACTURER
+                                    DEVICE_MANUFACTURER,
+                                    mUseMidiCiVersion2
                                 )
                                 Log.d(TAG, "midiCISetupSuccess: $midiCISetupSuccess")
 
@@ -182,6 +184,10 @@ class MainActivity : Activity(), ScopeLogger {
 
     fun onToggleTryMidiCI(view: View) {
         mTryMidiCI = (view as CheckBox).isChecked
+    }
+
+    fun onToggleUseMidiCiVersion2(view: View) {
+        mUseMidiCiVersion2 = (view as CheckBox).isChecked
     }
 
     fun onClearLog() {

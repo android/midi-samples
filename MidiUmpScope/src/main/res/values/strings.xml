@@ -21,6 +21,7 @@
     <string name="show_raw_text">Show raw</string>
     <string name="lock_screen_text">Keep Screen On</string>
     <string name="try_midi_ci_text">Try MIDI CI</string>
+    <string name="midi_ci_version_2">MIDI CI Version 2</string>
     <string-array name="senders">
         <item>"none"</item>
     </string-array>

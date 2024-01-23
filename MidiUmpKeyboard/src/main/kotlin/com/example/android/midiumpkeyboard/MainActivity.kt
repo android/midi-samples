@@ -52,6 +52,7 @@ class MainActivity : Activity() {
     private var mDoneWithSetup = false
     private var mPitchBendEnabled = true
     private var mTryMidiCI = true
+    private var mUseMidiCiVersion2 = true
 
     inner class ChannelSpinnerActivity : OnItemSelectedListener {
         override fun onItemSelected(
@@ -148,7 +149,8 @@ class MainActivity : Activity() {
                                         .receiver
                                             as MidiInputPort,
                                     mGroup,
-                                    DEVICE_MANUFACTURER
+                                    DEVICE_MANUFACTURER,
+                                    mUseMidiCiVersion2
                                 )
                                 Log.d(TAG, "Was midi successful: $midiCISetupSuccess")
 
@@ -341,6 +343,10 @@ class MainActivity : Activity() {
 
     fun onToggleTryMidiCI(view: View) {
         mTryMidiCI = (view as CheckBox).isChecked
+    }
+
+    fun onToggleUseMidiCiVersion2(view: View) {
+        mUseMidiCiVersion2 = (view as CheckBox).isChecked
     }
 
     private fun logByteArray(prefix: String, value: ByteArray, offset: Int, count: Int) {

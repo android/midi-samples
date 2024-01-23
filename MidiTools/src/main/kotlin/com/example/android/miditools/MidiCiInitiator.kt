@@ -38,7 +38,7 @@ class MidiCiInitiator {
     }
 
     fun setupMidiCI(midiReceiver: WaitingMidiReceiver, inputPort: MidiInputPort, groupId : Int,
-                    deviceManufacturer: ByteArray) : Boolean {
+                    deviceManufacturer: ByteArray, useFunctionBlocks: Boolean) : Boolean {
         val discoveryHelper = MidiCIDiscoveryHelper()
         val sysExConverter = MidiUmpSysExConverter()
 
@@ -49,12 +49,18 @@ class MidiCiInitiator {
         }
         discoveryHelper.setSourceDeviceManufacturer(deviceManufacturer)
 
+        if (useFunctionBlocks) {
+            discoveryHelper.setMidiCiMessageVersion(MidiCIDiscoveryHelper.MIDI_CI_MESSAGE_VERSION_2)
+        } else {
+            discoveryHelper.setMidiCiMessageVersion(MidiCIDiscoveryHelper.MIDI_CI_MESSAGE_VERSION_1)
+        }
+
         val discoveryMessage = discoveryHelper.generateDiscoveryMessage()
         val discoveryMessageUmp = sysExConverter.addUmpFramingToSysExMessage(discoveryMessage, groupId)
         inputPort.send(discoveryMessageUmp, 0, discoveryMessageUmp.size)
         logByteArray("discoveryMessage: ", discoveryMessageUmp, 0, discoveryMessageUmp.size)
 
-        var discoveryReplyMessageUmp = waitForMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
+        var discoveryReplyMessageUmp = waitForSysExMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
         while (discoveryReplyMessageUmp.isNotEmpty()) {
             val discoveryReplyMessage =
                 sysExConverter.removeUmpFramingFromUmpSysExMessage(discoveryReplyMessageUmp)
@@ -63,62 +69,163 @@ class MidiCiInitiator {
                 break
             }
             // Try again if message is bad
-            discoveryReplyMessageUmp = waitForMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
+            discoveryReplyMessageUmp = waitForSysExMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
         }
         if (discoveryReplyMessageUmp.isEmpty()) {
             Log.e(TAG, "No discoveryReplyMessage received")
             return false
         }
 
-        val initiateProtocolMessage = discoveryHelper.generateInitiateProtocolNegotiationMessage()
-        val initiateProtocolMessageUmp = sysExConverter.addUmpFramingToSysExMessage(initiateProtocolMessage, groupId)
-        inputPort.send(initiateProtocolMessageUmp, 0, initiateProtocolMessageUmp.size)
-        logByteArray("initiateProtocolMessage: ", initiateProtocolMessageUmp, 0, initiateProtocolMessageUmp.size)
+        if (useFunctionBlocks) {
+            val endpointDiscoveryMessage =
+                discoveryHelper.generateEndpointDiscoveryMessage()
+            inputPort.send(endpointDiscoveryMessage, 0, endpointDiscoveryMessage.size)
+            logByteArray(
+                "endpointDiscoveryMessage: ",
+                endpointDiscoveryMessage,
+                0,
+                endpointDiscoveryMessage.size
+            )
 
-        var initiateReplyMessageUmp = waitForMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
-        while (initiateReplyMessageUmp.isNotEmpty()) {
-            val initiateReplyMessage = sysExConverter.removeUmpFramingFromUmpSysExMessage(initiateReplyMessageUmp)
-            logByteArray("initiateReplyMessage: ", initiateReplyMessageUmp, 0, initiateReplyMessageUmp.size)
-            if (discoveryHelper.parseInitiateProtocolNegotiationReply(initiateReplyMessage)) {
-                break
+            var endpointInfoNotificationMessage =
+                waitForGrouplessMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS)
+            while (endpointInfoNotificationMessage.isNotEmpty()) {
+                logByteArray(
+                    "endpointInfoNotificationMessage: ",
+                    endpointInfoNotificationMessage,
+                    0,
+                    endpointInfoNotificationMessage.size
+                )
+                if (discoveryHelper.parseEndpointInfoNotificationMessage(endpointInfoNotificationMessage)) {
+                    break
+                }
+                // Try again if message is bad
+                endpointInfoNotificationMessage =
+                    waitForGrouplessMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS)
             }
-            // Try again if message is bad
-            initiateReplyMessageUmp = waitForMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
-        }
-        if (initiateReplyMessageUmp.isEmpty()) {
-            Log.e(TAG, "No initiateReplyMessage received")
-            return false
-        }
-
-        val setNewProtocolMessage = discoveryHelper.generateSetNewProtocolMessage()
-        val setNewProtocolMessageUmp = sysExConverter.addUmpFramingToSysExMessage(setNewProtocolMessage, groupId)
-        inputPort.send(setNewProtocolMessageUmp, 0, setNewProtocolMessageUmp.size)
-        logByteArray("setNewProtocolMessage: ", setNewProtocolMessageUmp, 0, setNewProtocolMessageUmp.size)
-        TimeUnit.MILLISECONDS.sleep(PAUSE_TIME_FOR_SWITCHING_MILLIS)
-
-        val newProtocolInitiatorMessage = discoveryHelper.generateNewProtocolInitiatorMessage()
-        val newProtocolInitiatorMessageUmp = sysExConverter.addUmpFramingToSysExMessage(newProtocolInitiatorMessage, groupId)
-        inputPort.send(newProtocolInitiatorMessageUmp, 0, newProtocolInitiatorMessageUmp.size)
-        logByteArray("newProtocolInitiatorMessage: ", newProtocolInitiatorMessageUmp, 0, newProtocolInitiatorMessageUmp.size)
-
-        var newProtocolReplyMessageUmp = waitForMessage(midiReceiver, NEW_PROTOCOL_REPLY_TIMEOUT_MILLIS, groupId)
-        while (newProtocolReplyMessageUmp.isNotEmpty()) {
-            val newProtocolReplyMessage = sysExConverter.removeUmpFramingFromUmpSysExMessage(newProtocolReplyMessageUmp)
-            logByteArray("newProtocolReplyMessage: ", newProtocolReplyMessageUmp, 0, newProtocolReplyMessageUmp.size)
-            if (discoveryHelper.parseNewProtocolResponderReply(newProtocolReplyMessage)) {
-                break
+            if (endpointInfoNotificationMessage.isEmpty()) {
+                Log.e(TAG, "No endpointInfoNotificationMessage received")
+                return false
             }
-            // Try again if message is bad
-            newProtocolReplyMessageUmp = waitForMessage(midiReceiver, NEW_PROTOCOL_REPLY_TIMEOUT_MILLIS, groupId)
-        }
-        if (newProtocolReplyMessageUmp.isEmpty()) {
-            Log.e(TAG, "No newProtocolReplyMessage received")
-            return false
-        }
 
-        val confirmationMessage = discoveryHelper.generateConfirmationNewProtocolMessage()
-        val confirmationMessageUmp = sysExConverter.addUmpFramingToSysExMessage(confirmationMessage, groupId)
-        inputPort.send(confirmationMessageUmp, 0, confirmationMessageUmp.size)
+            val streamConfigurationRequestMessage =
+                discoveryHelper.generateStreamConfigurationRequestMessage()
+            inputPort.send(streamConfigurationRequestMessage, 0, streamConfigurationRequestMessage.size)
+            logByteArray(
+                "streamConfigurationRequestMessage: ",
+                streamConfigurationRequestMessage,
+                0,
+                streamConfigurationRequestMessage.size
+            )
+
+            var streamConfigurationNotificationMessage =
+                waitForGrouplessMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS)
+            while (streamConfigurationNotificationMessage.isNotEmpty()) {
+                logByteArray(
+                    "streamConfigurationNotificationMessage: ",
+                    streamConfigurationNotificationMessage,
+                    0,
+                    streamConfigurationNotificationMessage.size
+                )
+                if (discoveryHelper.parseStreamConfigurationNotificationMessage
+                        (streamConfigurationNotificationMessage)) {
+                    break
+                }
+                // Try again if message is bad
+                streamConfigurationNotificationMessage =
+                    waitForGrouplessMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS)
+            }
+            if (streamConfigurationNotificationMessage.isEmpty()) {
+                Log.e(TAG, "No streamConfigurationNotificationMessage received")
+                return false
+            }
+        } else {
+            val initiateProtocolMessage =
+                discoveryHelper.generateInitiateProtocolNegotiationMessage()
+            val initiateProtocolMessageUmp =
+                sysExConverter.addUmpFramingToSysExMessage(initiateProtocolMessage, groupId)
+            inputPort.send(initiateProtocolMessageUmp, 0, initiateProtocolMessageUmp.size)
+            logByteArray(
+                "initiateProtocolMessage: ",
+                initiateProtocolMessageUmp,
+                0,
+                initiateProtocolMessageUmp.size
+            )
+
+            var initiateReplyMessageUmp =
+                waitForSysExMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
+            while (initiateReplyMessageUmp.isNotEmpty()) {
+                val initiateReplyMessage =
+                    sysExConverter.removeUmpFramingFromUmpSysExMessage(initiateReplyMessageUmp)
+                logByteArray(
+                    "initiateReplyMessage: ",
+                    initiateReplyMessageUmp,
+                    0,
+                    initiateReplyMessageUmp.size
+                )
+                if (discoveryHelper.parseInitiateProtocolNegotiationReply(initiateReplyMessage)) {
+                    break
+                }
+                // Try again if message is bad
+                initiateReplyMessageUmp =
+                    waitForSysExMessage(midiReceiver, DISCOVERY_REPLY_TIMEOUT_MILLIS, groupId)
+            }
+            if (initiateReplyMessageUmp.isEmpty()) {
+                Log.e(TAG, "No initiateReplyMessage received")
+                return false
+            }
+
+            val setNewProtocolMessage = discoveryHelper.generateSetNewProtocolMessage()
+            val setNewProtocolMessageUmp =
+                sysExConverter.addUmpFramingToSysExMessage(setNewProtocolMessage, groupId)
+            inputPort.send(setNewProtocolMessageUmp, 0, setNewProtocolMessageUmp.size)
+            logByteArray(
+                "setNewProtocolMessage: ",
+                setNewProtocolMessageUmp,
+                0,
+                setNewProtocolMessageUmp.size
+            )
+            TimeUnit.MILLISECONDS.sleep(PAUSE_TIME_FOR_SWITCHING_MILLIS)
+
+            val newProtocolInitiatorMessage = discoveryHelper.generateNewProtocolInitiatorMessage()
+            val newProtocolInitiatorMessageUmp =
+                sysExConverter.addUmpFramingToSysExMessage(newProtocolInitiatorMessage, groupId)
+            inputPort.send(newProtocolInitiatorMessageUmp, 0, newProtocolInitiatorMessageUmp.size)
+            logByteArray(
+                "newProtocolInitiatorMessage: ",
+                newProtocolInitiatorMessageUmp,
+                0,
+                newProtocolInitiatorMessageUmp.size
+            )
+
+            var newProtocolReplyMessageUmp =
+                waitForSysExMessage(midiReceiver, NEW_PROTOCOL_REPLY_TIMEOUT_MILLIS, groupId)
+            while (newProtocolReplyMessageUmp.isNotEmpty()) {
+                val newProtocolReplyMessage =
+                    sysExConverter.removeUmpFramingFromUmpSysExMessage(newProtocolReplyMessageUmp)
+                logByteArray(
+                    "newProtocolReplyMessage: ",
+                    newProtocolReplyMessageUmp,
+                    0,
+                    newProtocolReplyMessageUmp.size
+                )
+                if (discoveryHelper.parseNewProtocolResponderReply(newProtocolReplyMessage)) {
+                    break
+                }
+                // Try again if message is bad
+                newProtocolReplyMessageUmp =
+                    waitForSysExMessage(midiReceiver, NEW_PROTOCOL_REPLY_TIMEOUT_MILLIS, groupId)
+            }
+            if (newProtocolReplyMessageUmp.isEmpty()) {
+                Log.e(TAG, "No newProtocolReplyMessage received")
+                return false
+            }
+
+            val confirmationMessage = discoveryHelper.generateConfirmationNewProtocolMessage()
+            val confirmationMessageUmp =
+                sysExConverter.addUmpFramingToSysExMessage(confirmationMessage, groupId)
+            inputPort.send(confirmationMessageUmp, 0, confirmationMessageUmp.size)
+        }
 
         Log.d(TAG, "Done with CI")
 
@@ -131,6 +238,15 @@ class MidiCiInitiator {
         }
 
         val targetFirstByte = (SYSEX_DATA_MESSAGE_TYPE shl 4) + groupId
+        return (message[0] == targetFirstByte.toByte())
+    }
+
+    private fun verifyMessageIsGrouplessMessage(message: ByteArray): Boolean {
+        if ((message.isEmpty()) || (message.size % UMP_PACKET_MULTIPLE != 0)) {
+            return false
+        }
+
+        val targetFirstByte = (GROUPLESS_MESSAGE_TYPE shl 4) // mt = f, f = 0
         return (message[0] == targetFirstByte.toByte())
     }
 
@@ -155,7 +271,7 @@ class MidiCiInitiator {
         return false
     }
 
-    private fun waitForMessage(midiReceiver: WaitingMidiReceiver, timeoutMs : Long, groupId: Int)
+    private fun waitForSysExMessage(midiReceiver: WaitingMidiReceiver, timeoutMs : Long, groupId: Int)
             : ByteArray {
         val startTime = LocalDateTime.now()
         var currentTime = startTime
@@ -186,6 +302,38 @@ class MidiCiInitiator {
         return outputMessage
     }
 
+    private fun waitForGrouplessMessage(midiReceiver: WaitingMidiReceiver, timeoutMs : Long)
+            : ByteArray {
+        val startTime = LocalDateTime.now()
+        var currentTime = startTime
+        val endTime = startTime.plus(timeoutMs, ChronoField.MILLI_OF_DAY.baseUnit)
+        var outputMessage = ByteArray(0)
+        var isGroupless = false
+        while (endTime > currentTime) {
+            val remainingDurationMs = ChronoUnit.MILLIS.between(currentTime, endTime)
+            midiReceiver.waitForMessages(midiReceiver.readCount + 1,
+                remainingDurationMs.toInt())
+            while (midiReceiver.readCount < midiReceiver.messageCount) {
+                val currentMessage = midiReceiver.getMessage(midiReceiver.readCount).data
+                logByteArray("received: ", currentMessage, 0, currentMessage.size)
+                midiReceiver.readCount++
+
+                // If at least one groupless message has been received, return it
+                isGroupless = isGroupless || verifyMessageIsGrouplessMessage(currentMessage)
+                if (isGroupless) {
+                    outputMessage += currentMessage
+                }
+
+                if (outputMessage.size >= GROUPLESS_MESSAGE_SIZE) {
+                    return outputMessage
+                }
+            }
+            currentTime = LocalDateTime.now()
+
+        }
+        return outputMessage
+    }
+
     private fun generateSourceMuid(): ByteArray {
         // 28 bits in 4 bytes
         val bytes = Random.Default.nextBytes(4)
@@ -199,6 +347,8 @@ class MidiCiInitiator {
     companion object {
         const val TAG = "MidiCIInitiator"
         const val SYSEX_DATA_MESSAGE_TYPE = 0x3
+        const val GROUPLESS_MESSAGE_TYPE = 0xf
+        const val GROUPLESS_MESSAGE_SIZE = 16
         const val SYSEX_PACKET_END = 0x30.toByte()
         const val SYSEX_PACKET_START = 0x10.toByte()
         const val UMP_PACKET_MULTIPLE = 8

@@ -23,11 +23,12 @@ class TestCIDiscovery {
     private val mCiDiscoveryHelper = MidiCIDiscoveryHelper()
 
     @Test
-    fun testCIDiscovery() {
+    fun testCIDiscoveryVersion1() {
         // Run tests in order because these functions are stateful and rely on previous calls
         mCiDiscoveryHelper.setSourceMuid(byteArrayOf(0x01, 0x02, 0x03, 0x04))
-        testGenerateDiscoveryMessage()
-        testParseDiscoveryReply()
+        mCiDiscoveryHelper.setMidiCiMessageVersion(0x01)
+        testGenerateDiscoveryMessage(true)
+        testParseDiscoveryReply(true)
         testGenerateInitiateProtocolNegotiationMessage()
         testParseInitiateProtocolNegotiationReply()
         testGenerateSetNewProtocolMessage()
@@ -36,8 +37,25 @@ class TestCIDiscovery {
         testGenerateConfirmationNewProtocolMessage()
     }
 
-    private fun testGenerateDiscoveryMessage() {
-        val expectedOutputBytes = byteArrayOf(
+    @Test
+    fun testCIDiscoveryVersion2() {
+        // Run tests in order because these functions are stateful and rely on previous calls
+        mCiDiscoveryHelper.setSourceMuid(byteArrayOf(0x01, 0x02, 0x03, 0x04))
+        mCiDiscoveryHelper.setMidiCiMessageVersion(0x02)
+        testGenerateDiscoveryMessage(false)
+        testParseDiscoveryReply(false)
+        testGenerateEndpointDiscoveryMessage()
+        testParseEndpointInfoNotificationMessage()
+        testGenerateStreamConfigurationRequestMessage()
+        testParseStreamConfigurationNotificationMessage()
+    }
+
+    private fun testGenerateDiscoveryMessage(isVersion1 : Boolean) {
+        var midiCiVersion = 0x01.toByte()
+        if (!isVersion1) {
+            midiCiVersion = 0x02.toByte()
+        }
+        var expectedOutputBytes = byteArrayOf(
             // Universal System Exclusive
             0x7E.toByte(),
             // Device ID: 7F = to MIDI Port
@@ -47,7 +65,7 @@ class TestCIDiscovery {
             // Universal System Exclusive Sub-ID#2: Discovery
             0x70.toByte(),
             // MIDI-CI Message Version/Format
-            0x01.toByte(),
+            midiCiVersion,
             // Source MUID (LSB first)
             0x01.toByte(), 0x02.toByte(), 0x03.toByte(), 0x04.toByte(),
             //  Destination MUID (LSB first) (to Broadcast MUID)
@@ -65,12 +83,20 @@ class TestCIDiscovery {
             // Receivable Maximum SysEx Message Size (LSB first)
             0x00.toByte(), 0x20.toByte(), 0x00.toByte(), 0x00.toByte(),
         )
+        if (!isVersion1) {
+            // Initiator output path id
+            expectedOutputBytes += 0x00.toByte()
+        }
         val actualOutputBytes = mCiDiscoveryHelper.generateDiscoveryMessage()
         Assert.assertArrayEquals(expectedOutputBytes, actualOutputBytes)
     }
 
-    private fun testParseDiscoveryReply() {
-        val discoveryReply = byteArrayOf(
+    private fun testParseDiscoveryReply(isVersion1 : Boolean) {
+        var midiCiVersion = 0x01.toByte()
+        if (!isVersion1) {
+            midiCiVersion = 0x02.toByte()
+        }
+        var discoveryReply = byteArrayOf(
             // Universal System Exclusive
             0x7E.toByte(),
             // Device ID: 7F = from MIDI Port
@@ -80,7 +106,7 @@ class TestCIDiscovery {
             // Universal System Exclusive Sub-ID#2: Reply to Discovery
             0x71.toByte(),
             // MIDI-CI Message Version/Format
-            0x01.toByte(),
+            midiCiVersion,
             // Source MUID (LSB first)
             0x06.toByte(), 0x78.toByte(), 0x9A.toByte(), 0xBC.toByte(),
             // Destination MUID (LSB first)
@@ -98,8 +124,14 @@ class TestCIDiscovery {
             // Receivable Maximum SysEx Message Size (LSB first)
             0x00.toByte(), 0x40.toByte(), 0x00.toByte(), 0x00.toByte(),
         )
+        if (!isVersion1) {
+            // Initiator output path id
+            discoveryReply += 0x00.toByte()
+            // Function block
+            discoveryReply += 0x10.toByte()
+        }
         Assert.assertTrue(mCiDiscoveryHelper.parseDiscoveryReply(discoveryReply))
-        Assert.assertEquals(0x01.toByte(), mCiDiscoveryHelper.getDestinationCiVersion())
+        Assert.assertEquals(midiCiVersion, mCiDiscoveryHelper.getDestinationCiVersion())
         Assert.assertArrayEquals(byteArrayOf(0x06.toByte(),0x78.toByte(), 0x9A.toByte(),
                 0xBC.toByte()), mCiDiscoveryHelper.getDestinationMuid())
         Assert.assertArrayEquals(byteArrayOf(0x90.toByte(), 0x00.toByte(), 0x00.toByte()),
@@ -113,6 +145,9 @@ class TestCIDiscovery {
         Assert.assertEquals(0x06.toByte(), mCiDiscoveryHelper.getDestinationCiCategory())
         Assert.assertArrayEquals(byteArrayOf(0x00.toByte(), 0x40.toByte(), 0x00.toByte(),
                 0x00.toByte()), mCiDiscoveryHelper.getDestinationMaxSysExSize())
+        if (!isVersion1) {
+            Assert.assertEquals(0x10.toByte(), mCiDiscoveryHelper.getFunctionBlock())
+        }
     }
 
     private fun testGenerateInitiateProtocolNegotiationMessage() {
@@ -274,5 +309,77 @@ class TestCIDiscovery {
         )
         val actualOutputBytes = mCiDiscoveryHelper.generateConfirmationNewProtocolMessage()
         Assert.assertArrayEquals(expectedOutputBytes, actualOutputBytes)
+    }
+
+    private fun testGenerateEndpointDiscoveryMessage() {
+        var expectedOutputBytes = byteArrayOf(
+            // mt = f, f = 0, status = 0x00
+            0xF0.toByte(), 0x00.toByte(),
+            // UMP Version Major
+            0x01.toByte(),
+            // UMP Version Minor
+            0x01.toByte(),
+            // 3 reserved bytes
+            0x00.toByte(), 0x00.toByte(), 0x00.toByte(),
+            // Filter Bitmap with only stream configuration
+            0x01.toByte(),
+        )
+        // 8 reserved bytes
+        expectedOutputBytes += ByteArray(8)
+        val actualOutputBytes = mCiDiscoveryHelper.generateEndpointDiscoveryMessage()
+        Assert.assertArrayEquals(expectedOutputBytes, actualOutputBytes)
+    }
+
+    private fun testParseEndpointInfoNotificationMessage() {
+        var newProtocolResponderReply = byteArrayOf(
+            // mt = f, f = 0, status = 0x01
+            0xF0.toByte(), 0x01.toByte(),
+            // UMP Version Major
+            0x01.toByte(),
+            // UMP Version Minor
+            0x01.toByte(),
+            // Static function blocks and the number of function blocks
+            0xf2.toByte(),
+            // Reserved byte
+            0x00.toByte(),
+            // MIDI 2.0 and MIDI 1.0 support
+            0x03.toByte(),
+            // Receive and Transmit JR Timestamp Capability
+            0x03.toByte(),
+        )
+        // 8 reserved bytes
+        newProtocolResponderReply += ByteArray(8)
+        Assert.assertTrue(mCiDiscoveryHelper.parseEndpointInfoNotificationMessage(
+            newProtocolResponderReply))
+    }
+
+    private fun testGenerateStreamConfigurationRequestMessage() {
+        var expectedOutputBytes = byteArrayOf(
+            // mt = f, f = 0, status = 0x05
+            0xF0.toByte(), 0x05.toByte(),
+            // Protocol (MIDI 2.0)
+            0x02.toByte(),
+            // Receive and Transmit JR Timestamp Capability
+            0x00.toByte(),
+        )
+        // 12 reserved bytes
+        expectedOutputBytes += ByteArray(12)
+        val actualOutputBytes = mCiDiscoveryHelper.generateStreamConfigurationRequestMessage()
+        Assert.assertArrayEquals(expectedOutputBytes, actualOutputBytes)
+    }
+
+    private fun testParseStreamConfigurationNotificationMessage() {
+        var newProtocolResponderReply = byteArrayOf(
+            // mt = f, f = 0, status = 0x06
+            0xF0.toByte(), 0x06.toByte(),
+            // Protocol (MIDI 2.0)
+            0x02.toByte(),
+            // Receive and Transmit JR Timestamp Capability
+            0x00.toByte(),
+        )
+        // 12 reserved bytes
+        newProtocolResponderReply += ByteArray(12)
+        Assert.assertTrue(mCiDiscoveryHelper.parseStreamConfigurationNotificationMessage(
+            newProtocolResponderReply))
     }
 }
