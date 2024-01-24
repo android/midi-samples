@@ -51,10 +51,7 @@ class TestCIDiscovery {
     }
 
     private fun testGenerateDiscoveryMessage(isVersion1 : Boolean) {
-        var midiCiVersion = 0x01.toByte()
-        if (!isVersion1) {
-            midiCiVersion = 0x02.toByte()
-        }
+        val midiCiVersion = (if (isVersion1) 0x01 else 0x02).toByte()
         var expectedOutputBytes = byteArrayOf(
             // Universal System Exclusive
             0x7E.toByte(),
@@ -92,10 +89,7 @@ class TestCIDiscovery {
     }
 
     private fun testParseDiscoveryReply(isVersion1 : Boolean) {
-        var midiCiVersion = 0x01.toByte()
-        if (!isVersion1) {
-            midiCiVersion = 0x02.toByte()
-        }
+        val midiCiVersion = (if (isVersion1) 0x01 else 0x02).toByte()
         var discoveryReply = byteArrayOf(
             // Universal System Exclusive
             0x7E.toByte(),

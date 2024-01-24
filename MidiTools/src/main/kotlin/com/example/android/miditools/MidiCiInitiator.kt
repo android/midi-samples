@@ -246,8 +246,9 @@ class MidiCiInitiator {
             return false
         }
 
-        val targetFirstByte = (GROUPLESS_MESSAGE_TYPE shl 4) // mt = f, f = 0
-        return (message[0] == targetFirstByte.toByte())
+        // mt = f, f = 0. Last two bits can be anything.
+        val targetFirstByte = (GROUPLESS_MESSAGE_TYPE shl 4)
+        return ((message[0] and 0xfc.toByte()) == targetFirstByte.toByte())
     }
 
     private fun checkMessageStartsWithSysExStart(message: ByteArray): Boolean {
@@ -271,6 +272,7 @@ class MidiCiInitiator {
         return false
     }
 
+    // Waits for a SysEx message from a certain group. Ignores all other messages.
     private fun waitForSysExMessage(midiReceiver: WaitingMidiReceiver, timeoutMs : Long, groupId: Int)
             : ByteArray {
         val startTime = LocalDateTime.now()
@@ -302,6 +304,7 @@ class MidiCiInitiator {
         return outputMessage
     }
 
+    // Waits for a groupless message. Ignores all other messages.
     private fun waitForGrouplessMessage(midiReceiver: WaitingMidiReceiver, timeoutMs : Long)
             : ByteArray {
         val startTime = LocalDateTime.now()
