@@ -32,6 +32,8 @@ class MidiCIDiscoveryHelper {
     private var mDestinationAuthorityLevel = 0x00.toByte()
     private var mDestinationNumSupportedProtocols = 0x00.toByte()
     private var mDestinationSupportedProtocols = byteArrayOf()
+    private var mMidiCiMessageVersion = 0x01.toByte()
+    private var mFunctionBlock = 0x00.toByte()
 
     fun getDestinationCiVersion() : Byte {
         return mDestinationCiVersion
@@ -77,13 +79,21 @@ class MidiCIDiscoveryHelper {
         mSourceDeviceManufacturer = deviceManufacturer
     }
 
+    fun setMidiCiMessageVersion(midiCiMessageVersion: Byte) {
+        mMidiCiMessageVersion = midiCiMessageVersion
+    }
+
+    fun getFunctionBlock() : Byte {
+        return mFunctionBlock
+    }
+
     fun generateDiscoveryMessage() : ByteArray {
         var discoveryMessage = ByteArray(0)
         discoveryMessage += UNIVERSAL_SYSTEM_EXCLUSIVE
         discoveryMessage += FROM_TO_MIDI_PORT_DEVICE_ID
         discoveryMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_1_MIDI_CI
         discoveryMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_DISCOVERY
-        discoveryMessage += MIDI_CI_MESSAGE_VERSION
+        discoveryMessage += mMidiCiMessageVersion
         discoveryMessage += mSourceMuid
         discoveryMessage += BROADCAST_DESTINATION_MUID
         discoveryMessage += mSourceDeviceManufacturer
@@ -92,15 +102,22 @@ class MidiCIDiscoveryHelper {
         discoveryMessage += SOFTWARE_REVISION
         discoveryMessage += CAPABILITY_INQUIRY_CATEGORY_SUPPORTED
         discoveryMessage += RECEIVABLE_MAXIMUM_SYSEX_MESSAGE_SIZE
+        if (mMidiCiMessageVersion != MIDI_CI_MESSAGE_VERSION_1) {
+            discoveryMessage += INITIATOR_OUTPUT_PATH_ID
+        }
 
         return discoveryMessage
     }
 
     fun parseDiscoveryReply(message : ByteArray) : Boolean {
         var index = 0
-        if (message.size != DISCOVERY_REPLY_TARGET_SIZE) {
+        var targetSize = DISCOVERY_REPLY_TARGET_SIZE_VERSION_1
+        if (mMidiCiMessageVersion != MIDI_CI_MESSAGE_VERSION_1) {
+            targetSize = DISCOVERY_REPLY_TARGET_SIZE_VERSION_2
+        }
+        if (message.size != targetSize) {
             Log.d(TAG, "message size (" + message.size + ") not target size ("
-                    + DISCOVERY_REPLY_TARGET_SIZE + ")")
+                    + targetSize + ")")
             return false
         }
         if (message[index] != UNIVERSAL_SYSTEM_EXCLUSIVE) {
@@ -155,6 +172,16 @@ class MidiCIDiscoveryHelper {
         mDestinationMaxSysExSize = message.copyOfRange(index,
             index + mDestinationMaxSysExSize.size)
         index += mDestinationMaxSysExSize.size
+        if (mMidiCiMessageVersion != MIDI_CI_MESSAGE_VERSION_1) {
+            if (message[index] != INITIATOR_OUTPUT_PATH_ID) {
+                Log.d(TAG, "Byte (" + message[index] + ") not output path instance id ("
+                        + INITIATOR_OUTPUT_PATH_ID + ")")
+                return false
+            }
+            index++
+            mFunctionBlock = message[index]
+            index++
+        }
         return true
     }
 
@@ -164,7 +191,7 @@ class MidiCIDiscoveryHelper {
         negotiationMessage += FROM_TO_MIDI_PORT_DEVICE_ID
         negotiationMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_1_MIDI_CI
         negotiationMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_INITIATE_PROTOCOL_NEGOTIATION
-        negotiationMessage += MIDI_CI_MESSAGE_VERSION
+        negotiationMessage += mMidiCiMessageVersion
         negotiationMessage += mSourceMuid
         negotiationMessage += mDestinationMuid
         negotiationMessage += AUTHORITY_LEVEL
@@ -257,7 +284,7 @@ class MidiCIDiscoveryHelper {
         newProtocolMessage += FROM_TO_MIDI_PORT_DEVICE_ID
         newProtocolMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_1_MIDI_CI
         newProtocolMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_SET_NEW_SELECTED_PROTOCOL
-        newProtocolMessage += MIDI_CI_MESSAGE_VERSION
+        newProtocolMessage += mMidiCiMessageVersion
         newProtocolMessage += mSourceMuid
         newProtocolMessage += mDestinationMuid
         newProtocolMessage += AUTHORITY_LEVEL
@@ -272,7 +299,7 @@ class MidiCIDiscoveryHelper {
         initiatorMessage += FROM_TO_MIDI_PORT_DEVICE_ID
         initiatorMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_1_MIDI_CI
         initiatorMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_TEST_NEW_PROTOCOL_INITIATOR
-        initiatorMessage += MIDI_CI_MESSAGE_VERSION
+        initiatorMessage += mMidiCiMessageVersion
         initiatorMessage += mSourceMuid
         initiatorMessage += mDestinationMuid
         initiatorMessage += AUTHORITY_LEVEL
@@ -359,11 +386,119 @@ class MidiCIDiscoveryHelper {
         initiatorMessage += FROM_TO_MIDI_PORT_DEVICE_ID
         initiatorMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_1_MIDI_CI
         initiatorMessage += UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_CONFIRMATION_NEW_PROTOCOL_ESTABLISHED
-        initiatorMessage += MIDI_CI_MESSAGE_VERSION
+        initiatorMessage += mMidiCiMessageVersion
         initiatorMessage += mSourceMuid
         initiatorMessage += mDestinationMuid
         initiatorMessage += AUTHORITY_LEVEL
         return initiatorMessage
+    }
+
+    fun generateEndpointDiscoveryMessage() : ByteArray {
+        var discoveryMessage = ByteArray(0)
+        discoveryMessage += byteArrayOf(0xf0.toByte(), 0x00); // mt = f, f = 0, status = 0x00
+        discoveryMessage += UMP_VERSION_MAJOR
+        discoveryMessage += UMP_VERSION_MINOR
+        discoveryMessage += ByteArray(3) // 3 reserved bytesR
+        discoveryMessage += FILTER_BITMAP
+        discoveryMessage += ByteArray(8) // 8 reserved bytes
+        return discoveryMessage
+    }
+
+    fun parseEndpointInfoNotificationMessage(message : ByteArray) : Boolean {
+        var index = 0
+        if (message.size != ENDPOINT_INFO_NOTIFICATION_SIZE) {
+            Log.d(
+                TAG, "message size (" + message.size + ") not target size ("
+                    + ENDPOINT_INFO_NOTIFICATION_SIZE + ")")
+            return false
+        }
+        if (message[index] != 0xf0.toByte()) { // mt = f, f = 0, status = 0x01
+            Log.d(
+                TAG, "First byte (" + message[index] + ") not ("
+                    + 0xf0.toByte() + ")")
+            return false
+        }
+        index++
+        if (message[index] != 0x01.toByte()) { // status = 0x01
+            Log.d(
+                TAG, "Second byte (" + message[index] + ") not ("
+                    + 0x01.toByte() + ")")
+            return false
+        }
+        index++
+        if (message[index] != UMP_VERSION_MAJOR) {
+            Log.d(
+                TAG, "Byte (" + message[index] + ") not UMP_VERSION_MAJOR ("
+                    + UMP_VERSION_MAJOR + ")")
+            return false
+        }
+        index++
+        if (message[index] != UMP_VERSION_MINOR) {
+            Log.d(
+                TAG, "Byte (" + message[index] + ") not UMP_VERSION_MINOR ("
+                    + UMP_VERSION_MINOR + ")")
+            return false
+        }
+        index++
+        index++ // We don't care about the number of function blocks in this demo
+        index++ // reserved
+        if (message[index] != 0x03.toByte()) { // We want support for both MIDI 1.0 and 2.0
+            Log.d(
+                TAG, "MIDI protocol capability (" + message[index] + ") not ("
+                    + 0x03.toByte() + ")")
+            return false
+        }
+        index++ // we don't care about timestamps in this demo
+        index+= 8 // reserved
+        return true
+    }
+
+    fun generateStreamConfigurationRequestMessage() : ByteArray {
+        var discoveryMessage = ByteArray(0)
+        discoveryMessage += byteArrayOf(0xf0.toByte(), 0x05); // mt = f, f = 0, status = 0x05
+        discoveryMessage += PROTOCOL_MIDI_2_0
+        discoveryMessage += 0x00.toByte() // rxjr = 0, txjr = 0
+        discoveryMessage += ByteArray(12) // 12 reserved bytes
+        return discoveryMessage
+    }
+
+    fun parseStreamConfigurationNotificationMessage(message : ByteArray) : Boolean {
+        var index = 0
+        if (message.size != STREAM_CONFIGURATION_NOTIFICATION_SIZE) {
+            Log.d(
+                TAG, "message size (" + message.size + ") not target size ("
+                    + STREAM_CONFIGURATION_NOTIFICATION_SIZE + ")")
+            return false
+        }
+        if (message[index] != 0xf0.toByte()) { // mt = f, f = 0, status = 0x06
+            Log.d(
+                TAG, "First byte (" + message[index] + ") not ("
+                    + 0xf0.toByte() + ")")
+            return false
+        }
+        index++
+        if (message[index] != 0x06.toByte()) { // status = 0x06
+            Log.d(
+                TAG, "Second byte (" + message[index] + ") not ("
+                    + 0x06.toByte() + ")")
+            return false
+        }
+        index++
+        if (message[index] != PROTOCOL_MIDI_2_0) {
+            Log.d(
+                TAG, "Byte (" + message[index] + ") not PROTOCOL_MIDI_2_0 ("
+                    + PROTOCOL_MIDI_2_0 + ")")
+            return false
+        }
+        index++
+        if (message[index] != 0x00.toByte()) { // rxjr = 0, txjr = 0
+            Log.d(
+                TAG, "Timestamps (" + message[index] + ") not ("
+                    + 0x00.toByte() + ")")
+            return false
+        }
+        index+= 12 // reserved
+        return true
     }
 
     companion object {
@@ -393,12 +528,12 @@ class MidiCIDiscoveryHelper {
                 = 0x14.toByte()
         const val UNIVERSAL_SYSTEM_EXCLUSIVE_SUB_ID_2_CONFIRMATION_NEW_PROTOCOL_ESTABLISHED
                 = 0x15.toByte()
-        const val MIDI_CI_MESSAGE_VERSION = 0x01.toByte()
         val BROADCAST_DESTINATION_MUID = byteArrayOf(0x7F, 0x7F, 0x7F, 0x7F)
         const val CAPABILITY_INQUIRY_CATEGORY_SUPPORTED = 0x07.toByte()
         val RECEIVABLE_MAXIMUM_SYSEX_MESSAGE_SIZE = byteArrayOf(0x00, 0x20, 0x00, 0x00)
 
-        const val DISCOVERY_REPLY_TARGET_SIZE = 29
+        const val DISCOVERY_REPLY_TARGET_SIZE_VERSION_1 = 29
+        const val DISCOVERY_REPLY_TARGET_SIZE_VERSION_2 = 31
 
         const val AUTHORITY_LEVEL = 0x6F.toByte()
         const val NUM_SUPPORTED_PROTOCOLS = 0x02.toByte()
@@ -410,5 +545,17 @@ class MidiCIDiscoveryHelper {
 
         const val TEST_NUMBER_COUNT = 48
         const val NEW_PROTOCOL_REPLY_SIZE = 62
+
+        const val MIDI_CI_MESSAGE_VERSION_1 = 0x01.toByte()
+        const val MIDI_CI_MESSAGE_VERSION_2 = 0x02.toByte()
+
+        const val INITIATOR_OUTPUT_PATH_ID = 0x00.toByte()
+
+        const val UMP_VERSION_MAJOR = 0x01.toByte()
+        const val UMP_VERSION_MINOR = 0x01.toByte()
+        const val FILTER_BITMAP = 0x01.toByte() // Only request stream configuration
+        const val ENDPOINT_INFO_NOTIFICATION_SIZE = 16
+        const val PROTOCOL_MIDI_2_0 = 0x02.toByte()
+        const val STREAM_CONFIGURATION_NOTIFICATION_SIZE = 16
     }
 }
