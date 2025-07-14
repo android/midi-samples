@@ -26,8 +26,6 @@ jobs:
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-        working-directory: ./midi-samples
 
       - name: Build MidiUmpKeyboard app
-        working-directory: ./midi-samples
         run: ./gradlew :MidiUmpKeyboard:assembleDebug
